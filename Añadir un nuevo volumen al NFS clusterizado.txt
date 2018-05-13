@@ -1,0 +1,225 @@
+TRABAJO:
+--------
+
+	Conectividad: Logear a la Máquina: tesol260 IP 10.129.64.85: root/8EX964PL
+	Conectividad: Logear a la Máquina: tesol261 IP 10.129.0.154: root/9EX964PL
+				
+
+			---- Sobre el Servidor tesol261 ---- (Que tiene el servicio Online)
+
+0.	Comprobar el estado del Cluster y ver donde están los recursos a modificar:
+
+		clrg status
+		
+		scstat
+		
+1. 	Desmonitorizar el recurso para crear un nuevo file system:
+
+		clrs unmonitor nas_1_hastorage -- (desde tesol260 o tesol261)
+		
+				  
+	NOTA: El disk_group ya lo tenemos creado, pues existe: 
+
+		nas_4_dg
+		nas_1_dg
+
+2.  Para crear el nuevo volumen:
+	
+		vxassist -g <dg name> make <volname> <size>
+		
+			vxassist -g nas_4_dg make nas_4_dg-fs1_ny_ola3 1g
+			vxassist -g nas_1_dg make nas_1_dg_rv_ola3 1g
+			
+			NOTE: si pones 5g son 5GB, si pones 3000m son 3000 MB
+			
+	
+3. 	Sincronizar diskgroup y monitorizar nuevamente el recurso hastorage	
+	
+		cldg sync <diskgroup>
+		
+			cldg sync nas_4_dg
+			cldg sync nas_1_dg
+			
+			clrs monitor nas_1_hastorage -- (desde tesol260 o tesol261)
+	
+	
+4. 	Crear el filesystem sobre el nuevo volumen:
+
+		mkfs -F vxfs /dev/vx/rdsk/<disk group>/<volume>
+		
+			mkfs -F vxfs /dev/vx/rdsk/nas_4_dg/nas_4_dg-fs1_ny_ola3
+			mkfs -F vxfs /dev/vx/rdsk/nas_1_dg/nas_1_dg_rv_ola3
+ 
+5. Despues montarlo desde /etc/vfstab:
+
+		NOTA: Crear backup de /etc/vfstab en ambos nodos tesol260 y tesol 261. Como los recursos tiene un Yes, es que son controlados localmente, no por el Cluster.
+				cd /etc/
+				cp vfstab vfstb.20170908.backup
+
+		5.1	En el fichero /etc/vfstab incluir las líneas:
+		
+			/dev/vx/dsk/nas_4_dg/nas_4_dg-fs1_ny_ola3       /dev/vx/rdsk/nas_4_dg/nas_4_dg-fs1_ny_ola3      /global/nas_4_dg/ny_ola3   vxfs    3       yes     global,largefiles,log
+			/dev/vx/dsk/nas_1_dg/nas_1_dg_rv_ola3       /dev/vx/rdsk/nas_1_dg/nas_1_dg_rv_ola3      /global/nas_1_dg/rv_ola3   vxfs    3	 yes	    global,largefiles,log
+			
+ 
+		5.2  Crear los nuevos puntos de montaje:
+		
+			mkdir -p <punto de montaje>
+		
+				mkdir -p /global/nas_4_dg/ny_ola3
+				mkdir -p /global/nas_1_dg/rv_ola3
+				
+		#####################################################		
+--------Realizar los punto 5.1 y 5.2 en el servidor tesol260:
+		#####################################################
+		
+		Continuamos en el servidor tesol261.
+		
+		4.3	Montar los nuevos puntos de montaje:
+		NOTA: Solo montarlo en tesol261. Despues comprobar que está montado desde tesol260.
+			mount	<punto de montaje>
+		
+				mount /global/nas_4_dg/ny_ola3
+				mount /global/nas_1_dg/rv_ola3
+		
+		
+5. Comprobación 1:
+		NOTA: Comprobar en ambos nodos tesol260 y tesol261
+		
+		df -h | grep "/global/nas_4_dg/ny_ola3"
+		ls -lart /global/nas_4_dg/ny_ola3
+		
+		df -h | grep "/global/nas_1_dg/rv_ola3"
+		ls -lart /global/nas_1_dg/rv_ola3
+		
+		
+6. Expotar el nuevo filesystem en el NFS:
+
+		NOTA: Crear backup de /global/nas_1_dg/SUNW.nfs/dfstab.nfs-rs en tesol261.
+
+		cd /global/nas_1_dg/SUNW.nfs
+		
+		cp dfstab.nfs-rs dfstab.nfs-rs.20170830.backup
+		
+		Editar el fichero dfstab.nfs-rs e incluir la siguietne linea:
+		
+		share -F nfs -o rw=10.51.64.9,anon=0 /global/nas_4_dg/ny_ola3
+		share -F nfs -o rw=10.51.64.9,anon=0 /global/nas_1_dg/rv_ola3
+		
+7. Exportar el fileystem en caliente:
+
+
+		NOTA: NO es necesario exportar manualmente ya que el cluster relee el archivo cada 30 segundos y exporta los archivos automaticamente.
+		
+		NO ES NECESARIO EJECUTAR: share -F nfs -o rw=10.51.64.9,anon=0 /global/nas_4_dg/ny_ola3
+		NO ES NECESARIO EJECUTAR: share -F nfs -o rw=10.51.64.9,anon=0 /global/nas_1_dg/rv_ola3
+
+8. Comprobación 2:
+		NOTA: Comprobar en tesol261 donde el recursos NFS está activo.
+
+		share | grep "/global/nas_4_dg/ny_ola3"
+		share | grep "/global/nas_1_dg/rv_ola3"
+		
+		Aproximadamente 30 seg después (capaz menos) con showmount -e verificar que se esté exportando el fs. Ya que el cluster relee el archivo y exporta los archivos.
+
+		Este es el interfae: aggr1:1: 	10.0.233.146, desde donde se exporta con NFS.
+		
+		showmount -e 10.0.233.146
+		
+
+MARCHA ATRAS:
+-------------
+
+1.	Desmontar el file system creado:
+
+		NOTA: Creo que no necesario:
+		
+		unshare /global/nas_4_dg/ny_ola3
+		unshare /global/nas_1_dg/rv_ola3
+		
+2.	Restaurar el fichero /global/nas_1_dg/SUNW.nfs/dfstab.nfs-rs
+
+		cp dfstab.nfs-rs.20170830.backup dfstab.nfs-rs
+		
+3.	Restaurar el fichero /etc/vfstab del backup realizado:
+
+	NOTA: En ambos Servidores Tesol260 y Tesol261
+
+		cp vfstb.20170830.backup vfstab
+		
+4.	Eliminar los puntos de montaje creados:
+
+		rm -rf /global/nas_4_dg/ny_ola3
+		rm -rf /global/nas_1_dg/rv_ola3
+		
+5.	Eliminar el file system creado:
+
+		(NO APLICA), es un file system de veritas.
+		
+		
+6.	Desmonitorizar el recurso para eliminar el nuevo volumen creado:
+
+		clrs unmonitor nas_1_hastorage -- (desde tesol260 o tesol261)
+		
+7.	Parar los volumenes creados:
+
+		7.1 Comprobar que volumenes son:
+					
+				vxinfo -g nas_4_dg
+				vxinfo -g nas_1_dg
+					
+		7.2	Parar los Volumenes:
+				
+				vxvol -g nas_4_dg stop nas_4_dg-fs1_ny_ola3
+				vxvol -g nas_1_dg stop nas_1_dg_rv_ola3
+				
+		7.3 Comprobar que volumenes están parados:
+					
+				vxinfo -g nas_4_dg
+				vxinfo -g nas_1_dg
+		
+			
+8.	Eliminar el nuevo volumen creado:
+
+		8.1 Eliminar los volumenes:
+
+				vxassist -g nas_4_dg remove volume nas_4_dg-fs1_ny_ola3
+				vxassist -g nas_1_dg remove volume nas_1_dg_rv_ola3
+				
+		8.2 Comprobar que los volumenes ya no existen:
+		
+				vxinfo -g nas_4_dg
+				vxinfo -g nas_1_dg
+		
+9. 	Sincronizar diskgroup y monitorizar nuevamente el recurso hastorage	
+		
+			cldg sync nas_4_dg
+			cldg sync nas_1_dg
+			
+			clrs monitor nas_1_hastorage
+			
+10. Comprobar que el Cluster está estable:
+
+			clrg status
+			scstat		
+
+			
+		
+	EN CASO DE NECESIDAD DE CONMUTAR EL CLUSTER:
+	############################################
+
+	Enviar el recurso al nodo tesol261:
+	-----------------------------------
+
+		scswitch -z -g nas_1_rg -h tesol261
+
+	Enviar el recurso al nodo tesol260:
+	-----------------------------------
+
+		scswitch -z -g nas_1_rg -h tesol260
+
+		INFO DE PARAMETROS:
+		-------------------
+	scswitch : para la conmutación
+	-z: opción -Z para especificar un clúster de zona desde el nodo de clúster global para incluir sólo la lista de grupos de recursos en el clúster de zona especificado.
+	-g: grupo de recursos
