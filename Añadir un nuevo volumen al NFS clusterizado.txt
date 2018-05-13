@@ -1,8 +1,5 @@
 TRABAJO:
 --------
-
-	Conectividad: Logear a la Máquina: tesol260 IP 10.129.64.85: root/8EX964PL
-	Conectividad: Logear a la Máquina: tesol261 IP 10.129.0.154: root/9EX964PL
 				
 
 			---- Sobre el Servidor tesol261 ---- (Que tiene el servicio Online)
